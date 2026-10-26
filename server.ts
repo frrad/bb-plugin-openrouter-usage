@@ -16,6 +16,10 @@ const GET_RESOURCE = "provider-usage.v1.getResource";
 const RESOURCE_ID = "openrouter";
 const CACHE_MS = 60_000;
 
+function resourceIdForHost(hostId: string): string {
+  return `${RESOURCE_ID}:${hostId}`;
+}
+
 const usageWindowSchema = z.object({
   kind: z.enum(["five-hour", "daily", "weekly", "custom"]),
   id: z.string().min(1),
@@ -215,31 +219,25 @@ export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(
     usageSourceContract,
     {
-      // Listed under the primary host, the machine whose Pi auth.json the
-      // server reads, so OpenRouter sits beside Claude Code and Codex instead
-      // of in a separate group the usage card switches to by default.
+      // Show the server-collected usage beside Claude Code and Codex on every
+      // host. The figures describe the same OpenRouter key and account.
       [LIST_RESOURCES]: async () => {
-        const { primaryHostId } = await bb.sdk.system.config();
-        const host = (await bb.sdk.hosts.list()).find(
-          (candidate) => candidate.id === primaryHostId,
-        );
-        if (host === undefined) return { resources: [] };
+        const hosts = await bb.sdk.hosts.list();
         return {
-          resources: [
-            {
-              accountKey: null,
-              id: RESOURCE_ID,
-              // Display name falls back to the provider id when no BB provider
-              // reports usage for it, so use a readable id.
-              providerId: "OpenRouter",
-              label: "OpenRouter (Pi key)",
-              scope: { kind: "host" as const, hostId: host.id, hostName: host.name },
-            },
-          ],
+          resources: hosts.map((host) => ({
+            accountKey: null,
+            id: resourceIdForHost(host.id),
+            // Display name falls back to the provider id when no BB provider
+            // reports usage for it, so use a readable id.
+            providerId: "OpenRouter",
+            label: "OpenRouter (Pi key)",
+            scope: { kind: "host" as const, hostId: host.id, hostName: host.name },
+          })),
         };
       },
       [GET_RESOURCE]: async ({ resourceId, refresh }) => {
-        if (resourceId !== RESOURCE_ID) {
+        const hosts = await bb.sdk.hosts.list();
+        if (!hosts.some((host) => resourceIdForHost(host.id) === resourceId)) {
           throw new Error(`Unknown usage resource ${resourceId}.`);
         }
         if (refresh || cached === null || Date.now() - cached.observedAt > CACHE_MS) {

@@ -1,7 +1,8 @@
 # bb-plugin-openrouter-usage
 
 A [bb](https://getbb.app) plugin that shows OpenRouter spend in bb's Provider
-usage panel, next to Claude Code and Codex.
+usage panel, next to Claude Code and Codex on every host. Each host shows the
+same server-collected key usage and account balance.
 
 - **Today / Week / Month** bars: spend for the OpenRouter key
   Pi (`@earendil-works/pi-coding-agent`) uses, against a monthly budget

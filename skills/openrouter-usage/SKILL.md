@@ -5,7 +5,8 @@ description: Explain or configure the OpenRouter Usage plugin, which shows Pi's 
 
 # OpenRouter Usage
 
-The plugin adds an **OpenRouter** source to Provider usage with these bars:
+The plugin adds an **OpenRouter** source to Provider usage on every host,
+with the same server-collected figures under each host. It has these bars:
 
 - **Today**, **This week**, **This month**: spend for the OpenRouter key Pi
   uses, against the monthly budget. Today's budget is the monthly budget
