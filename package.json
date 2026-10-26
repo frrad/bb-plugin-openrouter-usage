@@ -28,7 +28,7 @@
     "typescript": "^5.7.0"
   },
   "scripts": {
-    "test": "node --test usage.test.ts",
+    "test": "node --test *.test.ts",
     "typecheck": "tsc"
   }
 }
