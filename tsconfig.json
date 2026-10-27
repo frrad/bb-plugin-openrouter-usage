@@ -13,11 +13,19 @@
     ],
     "noEmit": true,
     "skipLibCheck": false,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx"
   },
   "include": [
     "server.ts",
     "usage.ts",
-    "usage.test.ts"
+    "usage.test.ts",
+    "thread-costs.ts",
+    "thread-costs.test.ts",
+    "cost-tracker.ts",
+    "contract.ts",
+    "host.ts",
+    "app.tsx",
+    "cost-tracker.test.ts"
   ]
 }

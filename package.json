@@ -1,6 +1,6 @@
 {
   "name": "bb-plugin-openrouter-usage",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "engines": {
     "bb": ">=0.47",
@@ -8,11 +8,13 @@
   },
   "bb": {
     "name": "OpenRouter Usage",
-    "description": "Shows OpenRouter spend for Pi's key against a monthly budget, plus the account credit balance, in Provider usage.",
+    "description": "Shows OpenRouter spend for Pi's key against a monthly budget and the account credit balance in Provider usage, plus what each Pi thread has cost.",
     "branding": {
       "icon": "ChartColumn"
     },
-    "server": "./server.ts"
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "host": "./host.ts"
   },
   "dependencies": {
     "zod": "^4.6.5"
@@ -25,7 +27,8 @@
     "better-sqlite3": "^12.0.0",
     "cron-parser": "^5.5.0",
     "hono": "^4.11.9",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "@types/react-dom": "^19.0.0"
   },
   "scripts": {
     "test": "node --test *.test.ts",
