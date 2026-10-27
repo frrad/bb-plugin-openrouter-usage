@@ -1,7 +1,8 @@
-// Shows what a Pi thread has cost: a muted figure in the thread header and a
-// row in the thread's Info tab. The figures come from the server, so every
+// Shows what a Pi thread has cost: a muted figure in the thread header that
+// opens a per-model breakdown, and a row in the thread's Info tab. The figures come from the server, so every
 // client shows the same total.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import {
   definePluginApp,
   experimental_DetailRow as DetailRow,
@@ -67,22 +68,71 @@ function exactness(cost: CostSummary): string {
   return `${cost.exactGenerations} of ${cost.generations} replies billed, rest estimated`;
 }
 
+/** Hover delay before the card closes, so the pointer can move onto it. */
+const CLOSE_DELAY_MS = 150;
+
 function HeaderCost({ threadId }: PluginThreadHeaderActionProps) {
   const cost = useThreadCost(threadId);
+  const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+  }, []);
   if (!cost) return null;
-  const models = cost.models
-    .map((model) => `${model.model}: ${formatUsd(model.costUsd, true)}`)
-    .join("\n");
-  const detail = `Thread cost ${formatUsd(cost.costUsd, true)} over ${plural(cost.generations, "reply")}, ${exactness(cost)}`;
+
+  // Like bb's context meter: a mouse opens it on hover, touch on tap.
+  const hover = (next: boolean) => (event: { pointerType: string }) => {
+    if (event.pointerType !== "mouse") return;
+    if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    if (next) setOpen(true);
+    else closeTimer.current = setTimeout(() => setOpen(false), CLOSE_DELAY_MS);
+  };
+
   return (
-    <span
-      role="img"
-      aria-label={detail}
-      title={`${detail}\n${models}`}
-      className="flex h-7 items-center px-1.5 text-xs tabular-nums text-muted-foreground"
-    >
-      {formatUsd(cost.costUsd)}
-    </span>
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger
+        aria-label={`Thread cost ${formatUsd(cost.costUsd, true)}`}
+        onPointerEnter={hover(true)}
+        onPointerLeave={hover(false)}
+        className="flex h-7 items-center rounded-md px-1.5 text-xs tabular-nums text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+      >
+        {formatUsd(cost.costUsd)}
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          align="end"
+          sideOffset={6}
+          collisionPadding={8}
+          onPointerEnter={hover(true)}
+          onPointerLeave={hover(false)}
+          onOpenAutoFocus={(event) => event.preventDefault()}
+          className="z-50 w-72 rounded-lg border border-border bg-popover p-3 text-sm text-popover-foreground shadow-md"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-muted-foreground">Thread cost</span>
+            <span className="font-medium tabular-nums">{formatUsd(cost.costUsd, true)}</span>
+          </div>
+          <ul className="mt-2 space-y-1 border-t border-border pt-2 text-xs">
+            {cost.models.map((model) => (
+              <li key={model.model} className="flex items-baseline gap-2">
+                <span className="min-w-0 flex-1 truncate">{model.model}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {plural(model.generations, "reply")}
+                </span>
+                <span className="w-16 shrink-0 text-right tabular-nums">
+                  {formatUsd(model.costUsd, true)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex justify-between gap-3 text-xs text-muted-foreground">
+            <span>{plural(cost.generations, "reply")}</span>
+            <span className="text-right">{exactness(cost)}</span>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
