@@ -11,7 +11,7 @@ account balance.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
 
 - **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`
-  (hover or tap for cost per model), and a Cost row in the thread's Info tab.
+  (hover for cost per model), and a Cost row in the thread's Info tab.
 
 ## Thread costs
 

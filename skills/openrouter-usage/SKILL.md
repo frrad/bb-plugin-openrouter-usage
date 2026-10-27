@@ -25,7 +25,7 @@ failed refresh shows "Couldn't refresh. Showing last update."
 
 ## Thread cost
 
-A Pi thread shows its cost in the thread header, e.g. `$0.80`. Hovering or tapping it
+A Pi thread shows its cost in the thread header, e.g. `$0.80`. Hovering
 lists cost per model. The thread's Info tab has a Cost row with the precise
 total and how much of it is OpenRouter's billed figure rather than Pi's own
 estimate. The plugin replaces each estimate with what OpenRouter billed,
