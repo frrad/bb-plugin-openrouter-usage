@@ -1,7 +1,8 @@
 // Per-thread cost tracking for Pi threads.
 //
 // Pi records a cost estimate for every reply in its session file, on the host
-// that ran the thread. The server asks that host (through this plugin's host
+// that ran the thread. While a Pi thread is active, or when the app first
+// shows a thread, the server asks that host (through this plugin's host
 // entry) for the replies, stores them in the plugin database, then asks
 // OpenRouter for each reply's billed cost. The per-thread total is kept in the
 // thread's plugin metadata and served to the app over RPC, so it shows on
@@ -176,7 +177,6 @@ export function registerCostTracker(
   const markUnavailable = db.prepare(
     `UPDATE generations SET attempts = ?, exact_status = 'unavailable' WHERE id = ?`,
   );
-  const hasThreadRows = db.prepare(`SELECT 1 FROM generations WHERE thread_id = ? LIMIT 1`);
 
   const host = bb.hosts.experimental_client({ contract: hostContract });
 
@@ -285,31 +285,11 @@ export function registerCostTracker(
     scheduled.clear();
   });
 
-  /** Sync every Pi thread once, skipping archived ones already stored. */
-  async function backfill(signal: AbortSignal): Promise<void> {
-    for (const archived of [false, true]) {
-      for (let offset = 0; !signal.aborted; offset += 200) {
-        const page = await bb.sdk.threads.list({
-          archived,
-          includeHidden: true,
-          limit: 200,
-          offset,
-        });
-        for (const thread of page) {
-          if (thread.providerId !== PI_PROVIDER_ID) continue;
-          if (archived && hasThreadRows.get(thread.id) !== undefined) {
-            // Stored already; just make sure its total is current.
-            await publish(thread.id).catch((error: unknown) => {
-              bb.log.warn(`cost update for ${thread.id} failed: ${String(error)}`);
-            });
-            continue;
-          }
-          await enqueueSync(thread.id);
-        }
-        if (page.length < 200) break;
-      }
-    }
-  }
+  // Threads the app has asked about since the plugin started. Viewing a
+  // thread reads its sessions once, which catches up threads that ran while
+  // the plugin was off. Nothing walks every thread, so old threads cost
+  // nothing until opened.
+  const viewed = new Set<string>();
 
   /** Ask OpenRouter for billed costs that are due. Returns whether more are due. */
   async function resolveExactCosts(): Promise<boolean> {
@@ -356,9 +336,6 @@ export function registerCostTracker(
 
   bb.background.service("thread-costs", {
     async start(signal) {
-      await backfill(signal).catch((error: unknown) => {
-        bb.log.warn(`cost backfill failed: ${String(error)}`);
-      });
       while (!signal.aborted) {
         const more = await resolveExactCosts().catch((error: unknown) => {
           bb.log.warn(`exact cost lookups failed: ${String(error)}`);
@@ -370,6 +347,12 @@ export function registerCostTracker(
   });
 
   bb.rpc.register(threadCostContract, {
-    "threadCost.get": ({ threadId }) => ({ cost: threadSummary(threadId) }),
+    "threadCost.get": ({ threadId }) => {
+      if (!viewed.has(threadId)) {
+        viewed.add(threadId);
+        void enqueueSync(threadId);
+      }
+      return { cost: threadSummary(threadId) };
+    },
   });
 }

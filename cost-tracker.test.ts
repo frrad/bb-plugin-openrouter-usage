@@ -25,14 +25,13 @@ async function until(check: () => boolean): Promise<void> {
   assert.ok(check(), "condition never held");
 }
 
-test("a Pi thread's replies are read from its host and priced by OpenRouter", async (t) => {
+test("viewing a Pi thread reads its replies from its host and prices them", async (t) => {
   const thread = { id: "thr_pi", providerId: "pi", environmentId: "env_mac" };
   const metadataWrites: unknown[] = [];
   const { bb, harness } = createFakePluginHost({
     pluginId: "openrouter-usage",
     sdk: {
       threads: {
-        list: async ({ archived }: { archived?: boolean }) => (archived ? [] : [thread]),
         get: async () => thread,
         events: {
           list: async () => [
@@ -74,6 +73,14 @@ test("a Pi thread's replies are read from its host and priced by OpenRouter", as
   });
   const service = harness.behavior.runService("thread-costs");
   try {
+    // Nothing is read until the app asks about the thread.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(harness.inspection.experimental_hostRpcCalls.length, 0);
+    const first = (await harness.behavior.callRpc("threadCost.get", {
+      threadId: "thr_pi",
+    })) as CostResult;
+    assert.equal(first.cost, null);
+
     await until(() =>
       metadataWrites.some(
         (write) =>

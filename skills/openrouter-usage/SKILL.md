@@ -25,16 +25,18 @@ failed refresh shows "Couldn't refresh. Showing last update."
 
 ## Thread cost
 
-A Pi thread shows its cost in a chip above the composer, e.g. `$0.80`.
-Clicking it lists cost and reply count per model. The thread's Info tab has
-a Cost row with the precise total. `≈` means some replies still use Pi's own
+A Pi thread shows its cost in the thread header, e.g. `$0.80`. Hovering
+lists cost per model. The thread's Info tab has a Cost row with the precise
+total and how much of it is OpenRouter's billed figure rather than Pi's own
 estimate. The plugin replaces each estimate with what OpenRouter billed,
 usually within a minute of the reply.
 
 The plugin reads Pi's session files on the machine that ran the thread and
-keeps the figures on the bb server. Totals stay after the session file is
-gone or that machine is offline. Threads whose session files were deleted
-before the plugin saw them show no cost.
+keeps the figures on the bb server. A thread is read while it runs and once
+when it is first shown after the plugin starts; old threads are not scanned.
+Totals stay after the session file is gone or that machine is offline.
+Threads whose session files were deleted before they were opened show no
+cost.
 
 The total is also stored in the thread's plugin metadata under `cost`
 (`costUsd`, `estimatedUsd`, `generations`, `exactGenerations`,
