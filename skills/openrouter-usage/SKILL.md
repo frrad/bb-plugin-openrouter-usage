@@ -27,8 +27,12 @@ failed refresh shows "Couldn't refresh. Showing last update."
 
 A Pi thread shows its cost in the thread header, e.g. `$0.80`. Hovering
 lists cost per model. The context card (hover or tap the ring by the
-composer) has a Thread cost row. A content script adds it, since bb has no
-slot there; if a bb update changes the card, that row can disappear while
+composer) adds Thread cost, then below a hairline: tokens in / out (input
+counts cached tokens), reasoning tokens (the thinking part of output),
+cache hits (share of input served from the provider's cache), replies with
+the average cost per reply, and the provider(s) OpenRouter routed to, e.g.
+Moonshot AI. Hovering a row explains it. A content script adds it, since bb has no
+slot there; if a bb update changes the card, those rows can disappear while
 the header and Info tab keep working. The thread's Info tab has a Cost row with the precise
 total and how much of it is OpenRouter's billed figure rather than Pi's own
 estimate. The plugin replaces each estimate with what OpenRouter billed,
@@ -43,7 +47,8 @@ cost.
 
 The total is also stored in the thread's plugin metadata under `cost`
 (`costUsd`, `estimatedUsd`, `generations`, `exactGenerations`,
-`pendingGenerations`, `models`). Read it with
+`pendingGenerations`, `inputTokens`, `outputTokens`, `cacheReadTokens`,
+`reasoningTokens`, `providers`, `models`). Read it with
 `bb plugin rpc call openrouter-usage threadCost.get --input-file <file>`,
 where the file holds `{"threadId": "thr_…"}`.
 

@@ -14,6 +14,8 @@ export type Generation = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  /** Output tokens spent thinking; part of outputTokens. */
+  reasoningTokens: number;
   /** Pi's estimate from its own price table. */
   estimatedUsd: number;
 };
@@ -69,6 +71,7 @@ export function parsePiSession(sessionId: string, text: string): Generation[] {
       outputTokens: num(usage.output),
       cacheReadTokens: num(usage.cacheRead),
       cacheWriteTokens: num(usage.cacheWrite),
+      reasoningTokens: num(usage.reasoning),
       estimatedUsd: cost,
     });
   }
@@ -80,11 +83,22 @@ export function isOpenRouterGeneration(generation: Pick<Generation, "id" | "prov
   return generation.provider === "openrouter" && generation.id.startsWith("gen-");
 }
 
-/** A stored generation: Pi's numbers plus OpenRouter's exact cost, once known. */
-export type StoredGeneration = Pick<Generation, "model" | "estimatedUsd"> & {
+/** A stored generation: Pi's numbers plus what OpenRouter reported, once known. */
+export type StoredGeneration = Pick<
+  Generation,
+  | "model"
+  | "estimatedUsd"
+  | "inputTokens"
+  | "outputTokens"
+  | "cacheReadTokens"
+  | "cacheWriteTokens"
+  | "reasoningTokens"
+> & {
   /** null until OpenRouter reports it, or when it never will. */
   exactUsd: number | null;
   exactStatus: ExactStatus;
+  /** The upstream provider OpenRouter routed to, e.g. "Moonshot AI". */
+  providerName: string | null;
 };
 
 /**
@@ -101,8 +115,17 @@ export type CostSummary = {
   generations: number;
   /** Generations whose cost is OpenRouter's billed figure. */
   exactGenerations: number;
-  /** Generations still waiting on OpenRouter. */
+  /** Generations still waiting on OpenRouter for their cost. */
   pendingGenerations: number;
+  /** All prompt tokens, cached or not. */
+  inputTokens: number;
+  outputTokens: number;
+  /** Prompt tokens served from the provider's cache. */
+  cacheReadTokens: number;
+  /** Output tokens spent thinking; part of outputTokens. */
+  reasoningTokens: number;
+  /** Upstream providers OpenRouter routed to, most replies first. */
+  providers: { name: string; generations: number }[];
   /** Cost per model, highest first. */
   models: { model: string; costUsd: number; generations: number }[];
 };
@@ -112,13 +135,25 @@ export function summarize(rows: readonly StoredGeneration[]): CostSummary {
   let estimatedUsd = 0;
   let exactGenerations = 0;
   let pendingGenerations = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheReadTokens = 0;
+  let reasoningTokens = 0;
+  const byProvider = new Map<string, number>();
   const byModel = new Map<string, { costUsd: number; generations: number }>();
   for (const row of rows) {
     const cost = row.exactUsd ?? row.estimatedUsd;
     costUsd += cost;
     estimatedUsd += row.estimatedUsd;
     if (row.exactUsd !== null) exactGenerations += 1;
-    if (row.exactStatus === "pending") pendingGenerations += 1;
+    if (row.exactStatus === "pending" && row.exactUsd === null) pendingGenerations += 1;
+    inputTokens += row.inputTokens + row.cacheReadTokens + row.cacheWriteTokens;
+    outputTokens += row.outputTokens;
+    cacheReadTokens += row.cacheReadTokens;
+    reasoningTokens += row.reasoningTokens;
+    if (row.providerName !== null) {
+      byProvider.set(row.providerName, (byProvider.get(row.providerName) ?? 0) + 1);
+    }
     const model = byModel.get(row.model) ?? { costUsd: 0, generations: 0 };
     model.costUsd += cost;
     model.generations += 1;
@@ -130,6 +165,13 @@ export function summarize(rows: readonly StoredGeneration[]): CostSummary {
     generations: rows.length,
     exactGenerations,
     pendingGenerations,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    reasoningTokens,
+    providers: [...byProvider.entries()]
+      .map(([name, generations]) => ({ name, generations }))
+      .sort((a, b) => b.generations - a.generations),
     models: [...byModel.entries()]
       .map(([model, totals]) => ({ model, ...totals }))
       .sort((a, b) => b.costUsd - a.costUsd),

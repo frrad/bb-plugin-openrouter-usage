@@ -12,6 +12,7 @@ export const generationSchema = z.object({
   outputTokens: z.number(),
   cacheReadTokens: z.number(),
   cacheWriteTokens: z.number(),
+  reasoningTokens: z.number(),
   estimatedUsd: z.number(),
 });
 
