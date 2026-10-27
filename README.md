@@ -10,9 +10,8 @@ account balance.
   prorated per day. Over budget, a bar turns red and passes 100%.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
 
-- **Thread cost**: a chip above a Pi thread's composer, e.g. `$0.80`
-  (click it for cost per model), and a Cost row in the thread's Info tab.
-  `≈` means part of the total is still Pi's estimate.
+- **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`
+  (hover for cost per model), and a Cost row in the thread's Info tab.
 
 ## Thread costs
 
@@ -23,7 +22,8 @@ those files and returns only per-reply cost records. The server
 (`cost-tracker.ts`):
 
 1. Re-reads a Pi thread's sessions a few seconds after its activity settles,
-   and backfills every Pi thread on startup.
+   and once when the app first shows a thread. Nothing walks every thread,
+   so old threads cost nothing until opened.
 2. Stores each reply in the plugin database, keyed by OpenRouter's `gen-…` id,
    so totals outlive the session file and an offline host.
 3. Asks OpenRouter's `/api/v1/generation` for each reply's billed cost,
@@ -34,7 +34,7 @@ those files and returns only per-reply cost records. The server
 Replies on abandoned branches count, since they were billed. A request that
 failed before the provider answered is skipped; one with an OpenRouter id is
 kept, because aborted streams can still be billed. Threads whose session files
-were already deleted show no cost.
+were deleted before they were opened show no cost.
 
 The key is read from Pi's `auth.json` (`$PI_CODING_AGENT_DIR` or
 `~/.pi/agent`), falling back to `OPENROUTER_API_KEY`. The plugin never stores
