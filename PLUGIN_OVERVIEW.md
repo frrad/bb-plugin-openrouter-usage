@@ -1,5 +1,5 @@
 Track what Pi spends on OpenRouter: overall in BB's Provider usage tab, and
-per thread in its header.
+per thread in its header and context card.
 
 ## What you get
 
@@ -8,7 +8,7 @@ per thread in its header.
 - How much OpenRouter credit is left on your account.
 - Over budget, a bar turns red and shows more than 100%, and the summary
   says how far over this month is.
-- What each Pi thread has cost, in its header (hover or tap for a per-model
+- What each Pi thread has cost, in its header (hover for a per-model
   breakdown) and in its Info tab. The same total shows on every device.
 
 ## How it works
