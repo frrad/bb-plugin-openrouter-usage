@@ -47,6 +47,11 @@ export const costSummarySchema = z.object({
   generations: z.number().int(),
   exactGenerations: z.number().int(),
   pendingGenerations: z.number().int(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  cacheReadTokens: z.number(),
+  reasoningTokens: z.number(),
+  providers: z.array(z.object({ name: z.string(), generations: z.number().int() })),
   models: z.array(
     z.object({ model: z.string(), costUsd: z.number(), generations: z.number().int() }),
   ),
@@ -60,10 +65,12 @@ export const threadCostContract = defineRpcContract({
 });
 
 const generationResponseSchema = z.object({
-  data: z.object({ total_cost: z.number() }),
+  data: z.object({ total_cost: z.number(), provider_name: z.string().nullish() }),
 });
 
-type Lookup = { kind: "found"; totalCostUsd: number } | { kind: "missing" };
+type Lookup =
+  | { kind: "found"; totalCostUsd: number; providerName: string | null }
+  | { kind: "missing" };
 
 class LookupUnauthorizedError extends Error {}
 
@@ -78,7 +85,11 @@ async function lookupGeneration(id: string, apiKey: string): Promise<Lookup> {
   }
   if (!response.ok) throw new Error(`OpenRouter /generation returned HTTP ${response.status}.`);
   const { data } = generationResponseSchema.parse(await response.json());
-  return { kind: "found", totalCostUsd: data.total_cost };
+  return {
+    kind: "found",
+    totalCostUsd: data.total_cost,
+    providerName: data.provider_name ?? null,
+  };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -97,6 +108,12 @@ type GenerationRow = {
   estimated_usd: number;
   exact_usd: number | null;
   exact_status: ExactStatus;
+  provider_name: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  reasoning_tokens: number;
 };
 
 export function registerCostTracker(
@@ -129,6 +146,12 @@ export function registerCostTracker(
     // (aborted streams OpenRouter still billed), so a resync restores those.
     // A no-op on a fresh install.
     `DELETE FROM generations WHERE estimated_usd = 0 AND input_tokens = 0 AND output_tokens = 0`,
+    `ALTER TABLE generations ADD COLUMN reasoning_tokens INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE generations ADD COLUMN provider_name TEXT`,
+    // Look up replies priced before provider names were kept. Their cost
+    // stays; only the provider fills in. A no-op on a fresh install.
+    `UPDATE generations SET exact_status = 'pending', next_attempt_at = 0, attempts = 0
+     WHERE exact_status = 'done'`,
   ]);
 
   // A reply copied into a forked thread's session keeps its original thread:
@@ -136,11 +159,12 @@ export function registerCostTracker(
   const insertGeneration = db.prepare(
     `INSERT INTO generations (id, thread_id, session_id, provider, model, created_at,
        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
-       estimated_usd, exact_status, next_attempt_at)
+       reasoning_tokens, estimated_usd, exact_status, next_attempt_at)
      VALUES (@id, @threadId, @sessionId, @provider, @model, @timestamp,
        @inputTokens, @outputTokens, @cacheReadTokens, @cacheWriteTokens,
-       @estimatedUsd, @exactStatus, @nextAttemptAt)
-     ON CONFLICT (id) DO NOTHING`,
+       @reasoningTokens, @estimatedUsd, @exactStatus, @nextAttemptAt)
+     -- Re-reads fill in fields added since the row was stored.
+     ON CONFLICT (id) DO UPDATE SET reasoning_tokens = excluded.reasoning_tokens`,
   );
   const insertAll = db.transaction(
     (threadId: string, sessionId: string, generations: readonly Generation[]) => {
@@ -161,7 +185,9 @@ export function registerCostTracker(
     },
   );
   const selectThreadRows = db.prepare(
-    `SELECT model, estimated_usd, exact_usd, exact_status FROM generations WHERE thread_id = ?`,
+    `SELECT model, estimated_usd, exact_usd, exact_status, provider_name, input_tokens,
+       output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens
+     FROM generations WHERE thread_id = ?`,
   );
   const selectDue = db.prepare(
     `SELECT id, thread_id, attempts FROM generations
@@ -169,7 +195,8 @@ export function registerCostTracker(
      ORDER BY next_attempt_at LIMIT ${LOOKUP_BATCH}`,
   );
   const markFound = db.prepare(
-    `UPDATE generations SET exact_usd = ?, exact_status = 'done', attempts = attempts + 1 WHERE id = ?`,
+    `UPDATE generations SET exact_usd = ?, provider_name = ?, exact_status = 'done',
+       attempts = attempts + 1 WHERE id = ?`,
   );
   const markRetry = db.prepare(
     `UPDATE generations SET attempts = ?, next_attempt_at = ? WHERE id = ?`,
@@ -189,6 +216,12 @@ export function registerCostTracker(
         estimatedUsd: row.estimated_usd,
         exactUsd: row.exact_usd,
         exactStatus: row.exact_status,
+        providerName: row.provider_name,
+        inputTokens: row.input_tokens,
+        outputTokens: row.output_tokens,
+        cacheReadTokens: row.cache_read_tokens,
+        cacheWriteTokens: row.cache_write_tokens,
+        reasoningTokens: row.reasoning_tokens,
       })),
     );
   }
@@ -307,7 +340,7 @@ export function registerCostTracker(
       try {
         const lookup = await lookupGeneration(row.id, apiKey);
         if (lookup.kind === "found") {
-          markFound.run(lookup.totalCostUsd, row.id);
+          markFound.run(lookup.totalCostUsd, lookup.providerName, row.id);
           touched.add(row.thread_id);
           continue;
         }

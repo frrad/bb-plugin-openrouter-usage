@@ -11,11 +11,14 @@ account balance.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
 
 - **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`
-  (hover for cost per model), a Thread cost row in the context card (the
-  ring by the composer), and a Cost row in the thread's Info tab.
+  (hover for cost per model), cost and token details in the context card
+  (the ring by the composer), and a Cost row in the thread's Info tab. The
+  card adds Thread cost, then tokens in / out, reasoning tokens, cache hit
+  rate, reply count with average cost, and the provider(s) OpenRouter routed
+  to.
   bb has no plugin slot for the context card, so a content script adds that
-  row. It finds the card by its `@container/context-window` class; a bb update
-  that renames it hides the row until the selector is updated.
+  rows. It finds the card by its `@container/context-window` class; a bb update
+  that renames it hides the rows until the selector is updated.
 
 ## Thread costs
 
@@ -30,8 +33,8 @@ those files and returns only per-reply cost records. The server
    so old threads cost nothing until opened.
 2. Stores each reply in the plugin database, keyed by OpenRouter's `gen-…` id,
    so totals outlive the session file and an offline host.
-3. Asks OpenRouter's `/api/v1/generation` for each reply's billed cost,
-   retrying with backoff while the stats are not ready yet.
+3. Asks OpenRouter's `/api/v1/generation` for each reply's billed cost and
+   serving provider, retrying with backoff while the stats are not ready yet.
 4. Writes the thread total to the thread's plugin metadata (`cost`) and tells
    open clients to refresh.
 

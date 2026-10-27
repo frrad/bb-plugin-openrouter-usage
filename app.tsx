@@ -1,6 +1,6 @@
-// Shows what a Pi thread has cost: a muted figure in the thread header, a
-// row in bb's context card (the ring by the composer), and a row in the
-// thread's Info tab. The figures come from the server, so every client shows
+// Shows what a Pi thread has cost: a muted figure in the thread header, cost
+// and token details in bb's context card (the ring by the composer), and a
+// row in the thread's Info tab. The figures come from the server, so every client shows
 // the same total.
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -117,12 +117,14 @@ function CostInfoRow({ threadId }: ExperimentalThreadInfoProps) {
   );
 }
 
-// bb's context card has no plugin slot, so this script adds a row to it,
+// bb's context card has no plugin slot, so this script adds rows to it,
 // styled like bb's own "Session cost" row (which bb fills only when the agent
 // provider reports a cost, and Pi's doesn't). It finds the card by its
-// container class; if a bb update renames that, the row just stops showing.
+// container class; if a bb update renames that, the rows just stop showing.
 const CONTEXT_CARD = '[class~="@container/context-window"]';
-const ROW_ATTRIBUTE = "data-openrouter-thread-cost";
+const ROWS_ATTRIBUTE = "data-openrouter-thread-cost";
+const ROW_CLASS =
+  "flex items-baseline justify-between gap-2 text-xs tabular-nums text-muted-foreground max-md:pointer-coarse:text-sm";
 
 /** The thread the card belongs to: the one on screen, else the one in the URL. */
 function cardThreadId(): string | null {
@@ -131,34 +133,105 @@ function cardThreadId(): string | null {
   return inUrl.findLast((id) => visibleThreads.has(id)) ?? null;
 }
 
+/** 2_412_000 → "2.4M", 29_089 → "29k", 950 → "950". */
+function formatTokens(tokens: number): string {
+  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (tokens >= 10_000) return `${Math.round(tokens / 1_000)}k`;
+  if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(tokens);
+}
+
+type CardRow = { label: string; value: string; title?: string };
+
+/** The cost row, then the details below a hairline. */
+function cardRows(cost: CostSummary, showCost: boolean): { cost: CardRow[]; details: CardRow[] } {
+  const details: CardRow[] = [
+    {
+      label: "Tokens in / out",
+      value: `${formatTokens(cost.inputTokens)} / ${formatTokens(cost.outputTokens)}`,
+    },
+  ];
+  if (cost.reasoningTokens > 0) {
+    details.push({
+      label: "Reasoning",
+      value: `${formatTokens(cost.reasoningTokens)} of output`,
+      title: `${Math.round((100 * cost.reasoningTokens) / Math.max(cost.outputTokens, 1))}% of output tokens were thinking`,
+    });
+  }
+  if (cost.inputTokens > 0) {
+    details.push({
+      label: "Cache hits",
+      value: `${Math.round((100 * cost.cacheReadTokens) / cost.inputTokens)}%`,
+      title: `${formatTokens(cost.cacheReadTokens)} of ${formatTokens(cost.inputTokens)} input tokens came from the provider's cache`,
+    });
+  }
+  details.push({
+    label: "Replies",
+    value: `${cost.generations} · avg ${formatUsd(cost.costUsd / cost.generations)}`,
+  });
+  if (cost.providers.length > 0) {
+    details.push({
+      label: cost.providers.length === 1 ? "Provider" : "Providers",
+      value: cost.providers.map((provider) => provider.name).join(", "),
+      title: cost.providers
+        .map((provider) => `${provider.name}: ${plural(provider.generations, "reply")}`)
+        .join("\n"),
+    });
+  }
+  return {
+    cost: showCost
+      ? [
+          {
+            label: "Thread cost",
+            value: formatUsd(cost.costUsd, true),
+            title: `${plural(cost.generations, "reply")}, ${exactness(cost)}`,
+          },
+        ]
+      : [],
+    details,
+  };
+}
+
+function rowElement(row: CardRow): HTMLElement {
+  const element = document.createElement("div");
+  element.className = ROW_CLASS;
+  const label = document.createElement("span");
+  label.textContent = row.label;
+  const value = document.createElement("span");
+  value.className = "min-w-0 truncate text-right";
+  value.textContent = row.value;
+  element.append(label, value);
+  if (row.title !== undefined) element.title = row.title;
+  return element;
+}
+
 function decorateContextCards(): void {
   const threadId = cardThreadId();
   const cost = threadId === null ? null : (lastKnown.get(threadId) ?? null);
   for (const card of document.querySelectorAll<HTMLElement>(CONTEXT_CARD)) {
     const body = card.querySelector<HTMLElement>(":scope > .flex.flex-col");
     if (body === null) continue;
-    let row = body.querySelector<HTMLElement>(`:scope > [${ROW_ATTRIBUTE}]`);
-    const providerReportsCost = [...body.children].some(
-      (child) => child !== row && child.textContent?.startsWith("Session cost"),
-    );
-    if (cost === null || providerReportsCost) {
-      row?.remove();
+    const existing = body.querySelector<HTMLElement>(`:scope > [${ROWS_ATTRIBUTE}]`);
+    if (cost === null) {
+      existing?.remove();
       continue;
     }
-    if (row === null) {
-      row = document.createElement("div");
-      row.setAttribute(ROW_ATTRIBUTE, "");
-      row.className =
-        "order-3 flex items-baseline justify-between gap-2 text-xs tabular-nums text-muted-foreground max-md:pointer-coarse:text-sm";
-      row.append(document.createElement("span"), document.createElement("span"));
-      body.append(row);
-    }
-    const [label, value] = row.children as unknown as [HTMLElement, HTMLElement];
-    const amount = formatUsd(cost.costUsd, true);
-    // Only write on change: this runs from a MutationObserver.
-    if (label.textContent !== "Thread cost") label.textContent = "Thread cost";
-    if (value.textContent !== amount) value.textContent = amount;
-    row.title = `${plural(cost.generations, "reply")}, ${exactness(cost)}`;
+    // bb shows its own "Session cost" if the provider ever reports one.
+    const providerReportsCost = [...body.children].some(
+      (child) => child !== existing && child.textContent?.startsWith("Session cost"),
+    );
+    const rows = cardRows(cost, !providerReportsCost);
+    // Rebuild only on change: this runs from a MutationObserver.
+    const key = JSON.stringify(rows);
+    if (existing?.getAttribute(ROWS_ATTRIBUTE) === key) continue;
+    const block = document.createElement("div");
+    block.setAttribute(ROWS_ATTRIBUTE, key);
+    block.className = "order-3 flex flex-col gap-2 max-md:pointer-coarse:gap-3";
+    const hairline = document.createElement("div");
+    hairline.className = "border-t border-border-hairline";
+    block.append(...rows.cost.map(rowElement), hairline, ...rows.details.map(rowElement));
+    if (existing === null) body.append(block);
+    else existing.replaceWith(block);
   }
 }
 
@@ -182,7 +255,7 @@ export default definePluginApp((app) => {
         observer.disconnect();
         costListeners.delete(schedule);
         if (frame !== null) cancelAnimationFrame(frame);
-        for (const row of document.querySelectorAll(`[${ROW_ATTRIBUTE}]`)) row.remove();
+        for (const block of document.querySelectorAll(`[${ROWS_ATTRIBUTE}]`)) block.remove();
       };
     },
   });

@@ -20,6 +20,7 @@ const assistant = (id: string, message: Record<string, unknown>) =>
         output: 176,
         cacheRead: 512,
         cacheWrite: 0,
+        reasoning: 110,
         cost: { total: 0.0126904 },
       },
       ...message,
@@ -56,6 +57,7 @@ test("parsePiSession keeps billed assistant replies", () => {
       outputTokens: 176,
       cacheReadTokens: 512,
       cacheWriteTokens: 0,
+      reasoningTokens: 110,
       estimatedUsd: 0.0126904,
     },
     {
@@ -67,6 +69,7 @@ test("parsePiSession keeps billed assistant replies", () => {
       outputTokens: 176,
       cacheReadTokens: 512,
       cacheWriteTokens: 0,
+      reasoningTokens: 110,
       estimatedUsd: 0.0126904,
     },
     {
@@ -78,6 +81,7 @@ test("parsePiSession keeps billed assistant replies", () => {
       outputTokens: 0,
       cacheReadTokens: 0,
       cacheWriteTokens: 0,
+      reasoningTokens: 0,
       estimatedUsd: 0,
     },
   ]);
@@ -89,21 +93,35 @@ test("only OpenRouter generations get an exact lookup", () => {
   assert.equal(isOpenRouterGeneration({ id: "gen-1", provider: "anthropic" }), false);
 });
 
-test("summarize prefers exact costs and groups by model", () => {
+test("summarize prefers exact costs and totals tokens", () => {
+  const tokens = {
+    inputTokens: 100,
+    outputTokens: 50,
+    cacheReadTokens: 900,
+    cacheWriteTokens: 0,
+    reasoningTokens: 20,
+  };
   const summary = summarize([
-    { model: "a", estimatedUsd: 0.1, exactUsd: 0.12, exactStatus: "done" },
-    { model: "a", estimatedUsd: 0.2, exactUsd: null, exactStatus: "pending" },
-    { model: "b", estimatedUsd: 0.5, exactUsd: null, exactStatus: "unavailable" },
+    { model: "a", estimatedUsd: 0.1, exactUsd: 0.12, exactStatus: "done", providerName: "Moonshot AI", ...tokens },
+    { model: "a", estimatedUsd: 0.2, exactUsd: null, exactStatus: "pending", providerName: null, ...tokens },
+    { model: "b", estimatedUsd: 0.5, exactUsd: null, exactStatus: "unavailable", providerName: null, ...tokens },
+    // Re-looked-up for its provider: the cost is already known.
+    { model: "b", estimatedUsd: 0.1, exactUsd: 0.1, exactStatus: "pending", providerName: null, ...tokens },
   ]);
-  assert.ok(Math.abs(summary.costUsd - 0.82) < 1e-9);
-  assert.ok(Math.abs(summary.estimatedUsd - 0.8) < 1e-9);
-  assert.equal(summary.generations, 3);
-  assert.equal(summary.exactGenerations, 1);
+  assert.ok(Math.abs(summary.costUsd - 0.92) < 1e-9);
+  assert.ok(Math.abs(summary.estimatedUsd - 0.9) < 1e-9);
+  assert.equal(summary.generations, 4);
+  assert.equal(summary.exactGenerations, 2);
   assert.equal(summary.pendingGenerations, 1);
+  assert.equal(summary.inputTokens, 4000);
+  assert.equal(summary.outputTokens, 200);
+  assert.equal(summary.cacheReadTokens, 3600);
+  assert.equal(summary.reasoningTokens, 80);
+  assert.deepEqual(summary.providers, [{ name: "Moonshot AI", generations: 1 }]);
   assert.deepEqual(
     summary.models.map((model) => [model.model, model.generations]),
     [
-      ["b", 1],
+      ["b", 2],
       ["a", 2],
     ],
   );

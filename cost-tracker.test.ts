@@ -15,6 +15,7 @@ const generation = (id: string, provider: string, estimatedUsd: number) => ({
   outputTokens: 5,
   cacheReadTokens: 0,
   cacheWriteTokens: 0,
+  reasoningTokens: 2,
   estimatedUsd,
 });
 
@@ -63,7 +64,7 @@ test("viewing a Pi thread reads its replies from its host and prices them", asyn
   const looked: string[] = [];
   t.mock.method(globalThis, "fetch", async (url: string) => {
     looked.push(url);
-    return Response.json({ data: { total_cost: 0.02 } });
+    return Response.json({ data: { total_cost: 0.02, provider_name: "Moonshot AI" } });
   });
 
   registerCostTracker(bb, async () => "sk-test", {
@@ -103,6 +104,8 @@ test("viewing a Pi thread reads its replies from its host and prices them", asyn
     assert.ok(Math.abs(cost.costUsd - 0.52) < 1e-9);
     assert.equal(cost.generations, 2);
     assert.equal(cost.pendingGenerations, 0);
+    assert.equal(cost.reasoningTokens, 4);
+    assert.deepEqual(cost.providers, [{ name: "Moonshot AI", generations: 1 }]);
     assert.ok(
       harness.inspection.realtimeSignals.some(
         (signal) => signal.channel === "thread-cost-changed",
