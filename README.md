@@ -11,7 +11,11 @@ account balance.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
 
 - **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`
-  (hover for cost per model), and a Cost row in the thread's Info tab.
+  (hover for cost per model), a Thread cost row in the context card (the
+  ring by the composer), and a Cost row in the thread's Info tab.
+  bb has no plugin slot for the context card, so a content script adds that
+  row. It finds the card by its `@container/context-window` class; a bb update
+  that renames it hides the row until the selector is updated.
 
 ## Thread costs
 

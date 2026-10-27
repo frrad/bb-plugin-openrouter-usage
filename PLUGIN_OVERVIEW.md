@@ -1,5 +1,5 @@
 Track what Pi spends on OpenRouter: overall in BB's Provider usage tab, and
-per thread in its header.
+per thread in its header and context card.
 
 ## What you get
 
