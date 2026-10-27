@@ -1,6 +1,6 @@
 ---
 name: openrouter-usage
-description: Explain or configure the OpenRouter Usage plugin, which shows Pi's OpenRouter spend and the account credit balance in BB's Provider usage tab.
+description: Explain or configure the OpenRouter Usage plugin, which shows Pi's OpenRouter spend and the account credit balance in BB's Provider usage tab, and what each Pi thread has cost.
 ---
 
 # OpenRouter Usage
@@ -23,11 +23,31 @@ Usage refreshes about every two minutes while it is visible, and when the
 window regains focus; the plugin caches OpenRouter's answer for a minute. A
 failed refresh shows "Couldn't refresh. Showing last update."
 
+## Thread cost
+
+A Pi thread shows its cost in a chip above the composer, e.g. `$0.80`.
+Clicking it lists cost and reply count per model. The thread's Info tab has
+a Cost row with the precise total. `≈` means some replies still use Pi's own
+estimate. The plugin replaces each estimate with what OpenRouter billed,
+usually within a minute of the reply.
+
+The plugin reads Pi's session files on the machine that ran the thread and
+keeps the figures on the bb server. Totals stay after the session file is
+gone or that machine is offline. Threads whose session files were deleted
+before the plugin saw them show no cost.
+
+The total is also stored in the thread's plugin metadata under `cost`
+(`costUsd`, `estimatedUsd`, `generations`, `exactGenerations`,
+`pendingGenerations`, `models`). Read it with
+`bb plugin rpc call openrouter-usage threadCost.get --input-file <file>`,
+where the file holds `{"threadId": "thr_…"}`.
+
 ## Key
 
 The plugin reads `openrouter.key` from Pi's `auth.json`
-(`$PI_CODING_AGENT_DIR` or `~/.pi/agent`), else `OPENROUTER_API_KEY`. It never
-stores the key.
+(`$PI_CODING_AGENT_DIR` or `~/.pi/agent`), else `OPENROUTER_API_KEY`, on the bb server. It never
+stores the key. Exact thread costs need that key to belong to the account
+that served the replies.
 
 ## Settings
 

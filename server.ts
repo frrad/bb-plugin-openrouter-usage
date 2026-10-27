@@ -4,11 +4,14 @@
 // Spend windows (today, this week, this month) come from GET /api/v1/key and
 // count only the key Pi uses. The credit balance comes from GET
 // /api/v1/credits and is account-wide.
+//
+// It also tracks what each Pi thread costs; see cost-tracker.ts.
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
+import { registerCostTracker } from "./cost-tracker.ts";
 import { buildUsage, type CreditBalance, type KeySpend } from "./usage.ts";
 
 const LIST_RESOURCES = "provider-usage.v1.listResources";
@@ -216,6 +219,8 @@ export default async function plugin(bb: BbPluginApi) {
     cached = null;
   });
 
+  registerCostTracker(bb, readPiOpenRouterKey);
+
   bb.rpc.register(
     usageSourceContract,
     {
@@ -253,3 +258,5 @@ export default async function plugin(bb: BbPluginApi) {
     },
   );
 }
+
+export { threadCostContract } from "./cost-tracker.ts";
