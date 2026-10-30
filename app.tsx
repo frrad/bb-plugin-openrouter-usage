@@ -66,9 +66,9 @@ function plural(count: number, word: string): string {
   return `${count} ${word}${count === 1 ? "" : "s"}`;
 }
 
-/** How much of the total is OpenRouter's billed figure rather than Pi's estimate. */
+/** How much of the total is confirmed by OpenRouter rather than Pi's estimate. */
 function exactness(cost: CostSummary): string {
-  if (cost.exactGenerations === cost.generations) return "billed by OpenRouter";
+  if (cost.exactGenerations === cost.generations) return "confirmed by OpenRouter";
   if (cost.pendingGenerations > 0) {
     return `confirming ${plural(cost.pendingGenerations, "reply")} with OpenRouter`;
   }
