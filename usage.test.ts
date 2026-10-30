@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildUsage } from "./usage.ts";
+import { buildUsage, keySpendFromResponse } from "./usage.ts";
 
 // 2026-10-25 is a Sunday; October has 31 days.
 const sundayNoonUtc = new Date("2026-10-25T12:00:00Z");
@@ -151,5 +151,31 @@ test("spend under a dollar keeps its cents in the label", () => {
   assert.deepEqual(
     usage.windows.map((window) => window.label),
     ["Today $0.05", "Week $0.16", "Month $0.16"],
+  );
+});
+
+test("key spend adds BYOK inference to OpenRouter usage", () => {
+  assert.deepEqual(
+    keySpendFromResponse({
+      usage_daily: 2.13,
+      usage_weekly: 10.62,
+      usage_monthly: 10.62,
+      byok_usage_daily: 28.16,
+      byok_usage_weekly: 28.16,
+      byok_usage_monthly: 28.16,
+    }),
+    { usageDaily: 2.13 + 28.16, usageWeekly: 10.62 + 28.16, usageMonthly: 10.62 + 28.16 },
+  );
+});
+
+test("key spend treats missing or null BYOK usage as zero", () => {
+  assert.deepEqual(
+    keySpendFromResponse({
+      usage_daily: 1,
+      usage_weekly: 2,
+      usage_monthly: 3,
+      byok_usage_daily: null,
+    }),
+    { usageDaily: 1, usageWeekly: 2, usageMonthly: 3 },
   );
 });

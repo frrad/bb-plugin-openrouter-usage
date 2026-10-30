@@ -9,7 +9,7 @@ The plugin adds an **OpenRouter** source to Provider usage on every host,
 with the same server-collected figures under each host. It has these bars:
 
 - **Today**, **This week**, **This month**: spend for the OpenRouter key Pi
-  uses, against the monthly budget. Today's budget is the monthly budget
+  uses, including BYOK inference billed by your own provider keys, against the monthly budget. Today's budget is the monthly budget
   divided by the days in the month; the week's is seven of those days.
   OpenRouter resets these in UTC, and the week starts on Monday.
 The badge beside the account shows the remaining credit balance, e.g.
@@ -71,8 +71,10 @@ that served the replies.
 
 Thread costs include the upstream provider's inference cost plus any
 OpenRouter charge for BYOK calls. For ordinary OpenRouter calls, its total
-already includes inference. Provider usage bars and the credit balance still
-show only OpenRouter spend. Updating the plugin refreshes previously confirmed
+already includes inference. Provider usage bars add the key's BYOK usage
+(`byok_usage_*` from `/api/v1/key`) to its OpenRouter usage, so they show total
+spend. The credit balance stays OpenRouter-only, since BYOK inference is billed
+by the upstream provider. Updating the plugin refreshes previously confirmed
 thread costs to include BYOK inference; stored totals remain visible while
 those lookups run. If upstream cost is missing, the plugin retries instead of
 confirming a zero cost.

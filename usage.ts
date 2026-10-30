@@ -1,12 +1,38 @@
 // Pure conversion from OpenRouter's key and credit figures to provider-usage
 // windows. Kept free of I/O so it can be tested directly.
 
-/** Spend for one API key, from GET /api/v1/key. Amounts are USD. */
+/**
+ * Spend for one API key, from GET /api/v1/key. Amounts are USD and include
+ * BYOK inference billed by the upstream provider.
+ */
 export type KeySpend = {
   usageDaily: number;
   usageWeekly: number;
   usageMonthly: number;
 };
+
+/** The usage fields of GET /api/v1/key's `data`. */
+export type KeyResponseData = {
+  usage_daily: number;
+  usage_weekly: number;
+  usage_monthly: number;
+  byok_usage_daily?: number | null;
+  byok_usage_weekly?: number | null;
+  byok_usage_monthly?: number | null;
+};
+
+/**
+ * OpenRouter reports BYOK inference (billed by the upstream provider, not
+ * from OpenRouter credits) separately from usage_*. The bars show total spend,
+ * so add the two. Missing BYOK fields count as zero.
+ */
+export function keySpendFromResponse(data: KeyResponseData): KeySpend {
+  return {
+    usageDaily: data.usage_daily + (data.byok_usage_daily ?? 0),
+    usageWeekly: data.usage_weekly + (data.byok_usage_weekly ?? 0),
+    usageMonthly: data.usage_monthly + (data.byok_usage_monthly ?? 0),
+  };
+}
 
 /** Account-wide balance, from GET /api/v1/credits. Amounts are USD. */
 export type CreditBalance = {
