@@ -65,7 +65,12 @@ export const threadCostContract = defineRpcContract({
 });
 
 const generationResponseSchema = z.object({
-  data: z.object({ total_cost: z.number(), provider_name: z.string().nullish() }),
+  data: z.object({
+    total_cost: z.number(),
+    is_byok: z.boolean().optional(),
+    upstream_inference_cost: z.number().nullish(),
+    provider_name: z.string().nullish(),
+  }),
 });
 
 type Lookup =
@@ -85,9 +90,15 @@ async function lookupGeneration(id: string, apiKey: string): Promise<Lookup> {
   }
   if (!response.ok) throw new Error(`OpenRouter /generation returned HTTP ${response.status}.`);
   const { data } = generationResponseSchema.parse(await response.json());
+  // BYOK inference is billed by the upstream provider; total_cost only
+  // covers OpenRouter's charge (including any routing fee). Ordinary calls
+  // already include inference in total_cost, so do not add it twice.
+  if (data.is_byok && data.upstream_inference_cost == null) {
+    return { kind: "missing" };
+  }
   return {
     kind: "found",
-    totalCostUsd: data.total_cost,
+    totalCostUsd: data.total_cost + (data.is_byok ? data.upstream_inference_cost! : 0),
     providerName: data.provider_name ?? null,
   };
 }
@@ -152,6 +163,11 @@ export function registerCostTracker(
     // stays; only the provider fills in. A no-op on a fresh install.
     `UPDATE generations SET exact_status = 'pending', next_attempt_at = 0, attempts = 0
      WHERE exact_status = 'done'`,
+    // Previous totals omitted upstream BYOK inference. Refresh stored calls
+    // once, including nonzero totals that may only contain a routing fee.
+    // Keep their last known cost until the lookup succeeds.
+    `UPDATE generations SET exact_status = 'pending', next_attempt_at = 0, attempts = 0
+     WHERE provider = 'openrouter' AND id LIKE 'gen-%' AND exact_status = 'done'`,
   ]);
 
   // A reply copied into a forked thread's session keeps its original thread:

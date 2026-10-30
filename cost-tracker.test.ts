@@ -26,99 +26,165 @@ async function until(check: () => boolean): Promise<void> {
   assert.ok(check(), "condition never held");
 }
 
-test("viewing a Pi thread reads its replies from its host and prices them", async (t) => {
-  const thread = { id: "thr_pi", providerId: "pi", environmentId: "env_mac" };
-  const metadataWrites: unknown[] = [];
+for (const scenario of [
+  { name: "legacy response", data: { total_cost: 0.02 }, expected: 0.02 },
+  { name: "ordinary call", data: { total_cost: 0.02, is_byok: false, upstream_inference_cost: 0.018 }, expected: 0.02 },
+  { name: "BYOK with no routing fee", data: { total_cost: 0, is_byok: true, upstream_inference_cost: 0.0296091 }, expected: 0.0296091 },
+  { name: "BYOK with a routing fee", data: { total_cost: 0.001, is_byok: true, upstream_inference_cost: 0.02 }, expected: 0.021 },
+  { name: "free BYOK call", data: { total_cost: 0, is_byok: true, upstream_inference_cost: 0 }, expected: 0 },
+  { name: "free ordinary call", data: { total_cost: 0, is_byok: false, upstream_inference_cost: 0.02 }, expected: 0 },
+  { name: "BYOK missing upstream cost", data: { total_cost: 0, is_byok: true }, expected: 0.01, pending: true },
+  { name: "BYOK null upstream cost", data: { total_cost: 0, is_byok: true, upstream_inference_cost: null }, expected: 0.01, pending: true },
+]) {
+  test(`viewing and pricing a Pi thread: ${scenario.name}`, async (t) => {
+    const thread = { id: "thr_pi", providerId: "pi", environmentId: "env_mac" };
+    const metadataWrites: unknown[] = [];
+    const { bb, harness } = createFakePluginHost({
+      pluginId: "openrouter-usage",
+      sdk: {
+        threads: {
+          get: async () => thread,
+          events: {
+            list: async () => [
+              { data: { providerThreadId: "pi_a" } },
+              { data: { providerThreadId: "pi_a" } },
+            ],
+          },
+          updatePluginMetadata: async (args: unknown) => {
+            metadataWrites.push(args);
+            return {};
+          },
+        },
+        environments: { get: async () => ({ id: "env_mac", hostId: "host_mac" }) },
+      } as never,
+      experimental_callHostRpc: () => ({
+        sessions: [
+          {
+            sessionId: "pi_a",
+            found: true,
+            generations: [
+              generation("gen-1", "openrouter", 0.01),
+              generation("pi_a#x", "anthropic", 0.5),
+            ],
+          },
+        ],
+      }),
+    });
+
+    const looked: string[] = [];
+    t.mock.method(globalThis, "fetch", async (url: string) => {
+      looked.push(url);
+      return Response.json({ data: { ...scenario.data, provider_name: "Moonshot AI" } });
+    });
+
+    registerCostTracker(bb, async () => "sk-test", {
+      syncDelayMs: 0,
+      firstLookupDelayMs: 0,
+      workerIntervalMs: 5,
+    });
+    const service = harness.behavior.runService("thread-costs");
+    try {
+      // Nothing is read until the app asks about the thread.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.equal(harness.inspection.experimental_hostRpcCalls.length, 0);
+      const first = (await harness.behavior.callRpc("threadCost.get", {
+        threadId: "thr_pi",
+      })) as CostResult;
+      assert.equal(first.cost, null);
+
+      await until(() =>
+        metadataWrites.some(
+          (write) =>
+            (write as { set: { cost: { exactGenerations: number } } }).set.cost
+              .exactGenerations === (scenario.pending ? 0 : 1),
+        ),
+      );
+      await until(() => looked.length === 1);
+      assert.deepEqual(harness.inspection.experimental_hostRpcCalls.map((call) => ({
+        method: call.method,
+        input: call.input,
+        hostId: call.hostId,
+      })), [{ method: "readPiSessions", input: { sessionIds: ["pi_a"] }, hostId: "host_mac" }]);
+      assert.deepEqual(looked, ["https://openrouter.ai/api/v1/generation?id=gen-1"]);
+
+      const { cost } = (await harness.behavior.callRpc("threadCost.get", {
+        threadId: "thr_pi",
+      })) as CostResult;
+      assert.ok(cost !== null);
+      // Exact for the OpenRouter call, Pi's estimate for the other one.
+      assert.ok(Math.abs(cost.costUsd - (0.5 + scenario.expected)) < 1e-9);
+      assert.equal(cost.generations, 2);
+      assert.equal(cost.pendingGenerations, scenario.pending ? 1 : 0);
+      assert.equal(cost.exactGenerations, scenario.pending ? 0 : 1);
+      assert.equal(cost.reasoningTokens, 4);
+      assert.deepEqual(cost.providers, scenario.pending ? [] : [{ name: "Moonshot AI", generations: 1 }]);
+      assert.ok(
+        harness.inspection.realtimeSignals.some(
+          (signal) => signal.channel === "thread-cost-changed",
+        ),
+      );
+
+      const none = (await harness.behavior.callRpc("threadCost.get", {
+        threadId: "thr_other",
+      })) as CostResult;
+      assert.equal(none.cost, null);
+    } finally {
+      service.controller.abort();
+      await service.done;
+      await harness.lifecycle.dispose();
+    }
+  });
+
+}
+
+
+test("upgrade refreshes stored costs without the original session file", async (t) => {
+  const writes: { set: { cost: CostSummary } }[] = [];
   const { bb, harness } = createFakePluginHost({
     pluginId: "openrouter-usage",
-    sdk: {
-      threads: {
-        get: async () => thread,
-        events: {
-          list: async () => [
-            { data: { providerThreadId: "pi_a" } },
-            { data: { providerThreadId: "pi_a" } },
-          ],
-        },
-        updatePluginMetadata: async (args: unknown) => {
-          metadataWrites.push(args);
-          return {};
-        },
+    sdk: { threads: {
+      get: async () => ({ providerId: "pi", environmentId: null }),
+      updatePluginMetadata: async (args: { set: { cost: CostSummary } }) => {
+        writes.push(args);
+        return {};
       },
-      environments: { get: async () => ({ id: "env_mac", hostId: "host_mac" }) },
-    } as never,
-    experimental_callHostRpc: () => ({
-      sessions: [
-        {
-          sessionId: "pi_a",
-          found: true,
-          generations: [
-            generation("gen-1", "openrouter", 0.01),
-            generation("pi_a#x", "anthropic", 0.5),
-          ],
-        },
-      ],
-    }),
+    } } as never,
   });
-
-  const looked: string[] = [];
-  t.mock.method(globalThis, "fetch", async (url: string) => {
-    looked.push(url);
-    return Response.json({ data: { total_cost: 0.02, provider_name: "Moonshot AI" } });
+  const timing = { syncDelayMs: 0, firstLookupDelayMs: 0, workerIntervalMs: 5 };
+  // Reproduce a v0.5.0 database by applying all but the new migration.
+  const migrate = bb.storage.migrate.bind(bb.storage);
+  const oldMigrations = t.mock.method(bb.storage, "migrate", (...args: Parameters<typeof bb.storage.migrate>) => {
+    const [db, statements] = args;
+    migrate(db, statements.slice(0, -1));
+    for (const [id, charge] of [["gen-zero", 0], ["gen-fee", 0.001]] as const) {
+      db.prepare(`INSERT INTO generations
+        (id, thread_id, session_id, provider, model, created_at, input_tokens,
+         output_tokens, cache_read_tokens, cache_write_tokens, estimated_usd,
+         exact_usd, exact_status, attempts)
+        VALUES (?, 'thr_old', 'deleted_session', 'openrouter', 'test/model', 1,
+          10, 5, 0, 0, 0.02, ?, 'done', 1)`).run(id, charge);
+    }
+    migrate(db, statements);
   });
-
-  registerCostTracker(bb, async () => "sk-test", {
-    syncDelayMs: 0,
-    firstLookupDelayMs: 0,
-    workerIntervalMs: 5,
-  });
-  const service = harness.behavior.runService("thread-costs");
+  t.mock.method(globalThis, "fetch", async (url: string) => Response.json({
+    data: { total_cost: url.endsWith("gen-fee") ? 0.001 : 0,
+      is_byok: true, upstream_inference_cost: 0.02, provider_name: "OpenAI" },
+  }));
+  let service: ReturnType<typeof harness.behavior.runService> | undefined;
   try {
-    // Nothing is read until the app asks about the thread.
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    registerCostTracker(bb, async () => "sk-test", timing);
+    oldMigrations.mock.restore();
+    const previous = await harness.behavior.callRpc("threadCost.get", { threadId: "thr_old" }) as CostResult;
+    assert.equal(previous.cost?.costUsd, 0.001);
+    service = harness.behavior.runService("thread-costs");
+    await until(() => writes.some((write) => Math.abs(write.set.cost.costUsd - 0.041) < 1e-9));
+    const corrected = await harness.behavior.callRpc("threadCost.get", { threadId: "thr_old" }) as CostResult;
+    assert.ok(Math.abs(corrected.cost!.costUsd - 0.041) < 1e-9);
+    assert.equal(corrected.cost?.exactGenerations, 2);
     assert.equal(harness.inspection.experimental_hostRpcCalls.length, 0);
-    const first = (await harness.behavior.callRpc("threadCost.get", {
-      threadId: "thr_pi",
-    })) as CostResult;
-    assert.equal(first.cost, null);
-
-    await until(() =>
-      metadataWrites.some(
-        (write) =>
-          (write as { set: { cost: { exactGenerations: number } } }).set.cost
-            .exactGenerations === 1,
-      ),
-    );
-    assert.deepEqual(harness.inspection.experimental_hostRpcCalls.map((call) => ({
-      method: call.method,
-      input: call.input,
-      hostId: call.hostId,
-    })), [{ method: "readPiSessions", input: { sessionIds: ["pi_a"] }, hostId: "host_mac" }]);
-    assert.deepEqual(looked, ["https://openrouter.ai/api/v1/generation?id=gen-1"]);
-
-    const { cost } = (await harness.behavior.callRpc("threadCost.get", {
-      threadId: "thr_pi",
-    })) as CostResult;
-    assert.ok(cost !== null);
-    // Exact for the OpenRouter call, Pi's estimate for the other one.
-    assert.ok(Math.abs(cost.costUsd - 0.52) < 1e-9);
-    assert.equal(cost.generations, 2);
-    assert.equal(cost.pendingGenerations, 0);
-    assert.equal(cost.reasoningTokens, 4);
-    assert.deepEqual(cost.providers, [{ name: "Moonshot AI", generations: 1 }]);
-    assert.ok(
-      harness.inspection.realtimeSignals.some(
-        (signal) => signal.channel === "thread-cost-changed",
-      ),
-    );
-
-    const none = (await harness.behavior.callRpc("threadCost.get", {
-      threadId: "thr_other",
-    })) as CostResult;
-    assert.equal(none.cost, null);
   } finally {
-    service.controller.abort();
-    await service.done;
+    service?.controller.abort();
+    if (service) await service.done;
     await harness.lifecycle.dispose();
   }
 });

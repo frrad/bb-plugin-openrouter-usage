@@ -65,3 +65,13 @@ npm test           # node --test *.test.ts
 npm run typecheck
 bb plugin build . && bb plugin reload openrouter-usage
 ```
+
+## Bring your own key (BYOK)
+
+Thread costs include the upstream provider's inference cost plus any
+OpenRouter charge for BYOK calls. For ordinary OpenRouter calls, its total
+already includes inference. Provider usage bars and the credit balance still
+show only OpenRouter spend. Updating the plugin refreshes previously confirmed
+thread costs to include BYOK inference; stored totals remain visible while
+those lookups run. If upstream cost is missing, the plugin retries instead of
+confirming a zero cost.
