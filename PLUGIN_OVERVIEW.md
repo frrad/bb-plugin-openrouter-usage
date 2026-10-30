@@ -6,7 +6,8 @@ per thread in its header and context card.
 - Today, This week and This month bars for the OpenRouter key Pi uses,
   including BYOK spend on your own provider keys, measured against one monthly budget you set.
 - How much OpenRouter credit is left on your account.
-- Over budget, a bar turns red and shows more than 100%, and the summary
+- Over budget, a bar turns red and shows more than 100%, a notch marks where
+  100% falls, and the summary
   says how far over this month is.
 - What each Pi thread has cost, in its header (hover for a per-model
   breakdown) and in its Info tab. The same total shows on every device.

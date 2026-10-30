@@ -27,6 +27,8 @@
     "contract.ts",
     "host.ts",
     "app.tsx",
+    "budget-markers.ts",
+    "budget-markers.test.ts",
     "cost-tracker.test.ts"
   ]
 }
