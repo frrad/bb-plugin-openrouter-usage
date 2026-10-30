@@ -12,7 +12,12 @@ import { join } from "node:path";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { registerCostTracker } from "./cost-tracker.ts";
-import { buildUsage, type CreditBalance, type KeySpend } from "./usage.ts";
+import {
+  buildUsage,
+  keySpendFromResponse,
+  type CreditBalance,
+  type KeySpend,
+} from "./usage.ts";
 
 const LIST_RESOURCES = "provider-usage.v1.listResources";
 const GET_RESOURCE = "provider-usage.v1.getResource";
@@ -97,6 +102,9 @@ const keyResponseSchema = z.object({
     usage_daily: z.number(),
     usage_weekly: z.number(),
     usage_monthly: z.number(),
+    byok_usage_daily: z.number().nullish(),
+    byok_usage_weekly: z.number().nullish(),
+    byok_usage_monthly: z.number().nullish(),
   }),
 });
 
@@ -140,11 +148,7 @@ async function getOpenRouter(path: string, apiKey: string): Promise<unknown> {
 
 async function fetchKeySpend(apiKey: string): Promise<KeySpend> {
   const { data } = keyResponseSchema.parse(await getOpenRouter("key", apiKey));
-  return {
-    usageDaily: data.usage_daily,
-    usageWeekly: data.usage_weekly,
-    usageMonthly: data.usage_monthly,
-  };
+  return keySpendFromResponse(data);
 }
 
 async function fetchCredits(apiKey: string): Promise<CreditBalance> {

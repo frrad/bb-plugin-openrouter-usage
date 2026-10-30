@@ -4,7 +4,7 @@ per thread in its header and context card.
 ## What you get
 
 - Today, This week and This month bars for the OpenRouter key Pi uses,
-  measured against one monthly budget you set.
+  including BYOK spend on your own provider keys, measured against one monthly budget you set.
 - How much OpenRouter credit is left on your account.
 - Over budget, a bar turns red and shows more than 100%, and the summary
   says how far over this month is.

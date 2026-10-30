@@ -5,7 +5,7 @@ usage panel, next to Claude Code and Codex on every host, and what each Pi
 thread has cost. Each host shows the same server-collected key usage and
 account balance.
 
-- **Today / Week / Month** bars: spend for the OpenRouter key
+- **Today / Week / Month** bars: total spend, including BYOK, for the OpenRouter key
   Pi (`@earendil-works/pi-coding-agent`) uses, against a monthly budget
   prorated per day. Over budget, a bar turns red and passes 100%.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
@@ -70,8 +70,10 @@ bb plugin build . && bb plugin reload openrouter-usage
 
 Thread costs include the upstream provider's inference cost plus any
 OpenRouter charge for BYOK calls. For ordinary OpenRouter calls, its total
-already includes inference. Provider usage bars and the credit balance still
-show only OpenRouter spend. Updating the plugin refreshes previously confirmed
+already includes inference. Provider usage bars add the key's BYOK usage
+(`byok_usage_*` from `/api/v1/key`) to its OpenRouter usage, so they show total
+spend. The credit balance stays OpenRouter-only, since BYOK inference is billed
+by the upstream provider. Updating the plugin refreshes previously confirmed
 thread costs to include BYOK inference; stored totals remain visible while
 those lookups run. If upstream cost is missing, the plugin retries instead of
 confirming a zero cost.
