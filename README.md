@@ -7,7 +7,11 @@ account balance.
 
 - **Today / Week / Month** bars: total spend, including BYOK, for the OpenRouter key
   Pi (`@earendil-works/pi-coding-agent`) uses, against a monthly budget
-  prorated per day. Over budget, a bar turns red and passes 100%.
+  prorated per day. Over budget, a bar turns red and passes 100%, and a small
+  notch marks where 100% falls, so the part past it is the overage. bb caps
+  bar fills at 100% and has no slot for them, so a content script draws the
+  notch; a bb update that changes the bars' classes hides it until
+  `budget-markers.ts` is updated.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
 
 - **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`

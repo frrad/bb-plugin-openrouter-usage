@@ -14,6 +14,7 @@ import {
 } from "@get-bb/plugin-sdk/app";
 import type { CostSummary } from "./thread-costs.ts";
 import type { threadCostContract } from "./cost-tracker.ts";
+import { clearUsageBarMarkers, decorateUsageBars } from "./budget-markers.ts";
 
 /** Mirrors COST_CHANGED in cost-tracker.ts (a value import would bundle the server). */
 const COST_CHANGED = "thread-cost-changed";
@@ -256,6 +257,29 @@ export default definePluginApp((app) => {
         costListeners.delete(schedule);
         if (frame !== null) cancelAnimationFrame(frame);
         for (const block of document.querySelectorAll(`[${ROWS_ATTRIBUTE}]`)) block.remove();
+      };
+    },
+  });
+
+  app.contentScripts.register({
+    id: "usage-budget-markers",
+    mount() {
+      let frame: number | null = null;
+      const schedule = () => {
+        if (frame !== null) return;
+        frame = requestAnimationFrame(() => {
+          frame = null;
+          decorateUsageBars();
+        });
+      };
+      // characterData: the figures beside a bar change in place on refresh.
+      const observer = new MutationObserver(schedule);
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+      schedule();
+      return () => {
+        observer.disconnect();
+        if (frame !== null) cancelAnimationFrame(frame);
+        clearUsageBarMarkers();
       };
     },
   });

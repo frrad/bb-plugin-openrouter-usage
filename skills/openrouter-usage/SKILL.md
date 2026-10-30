@@ -16,7 +16,9 @@ The badge beside the account shows the remaining credit balance, e.g.
 `$10.41 left`. The balance is account-wide, so it includes spend from every
 key.
 
-Over budget, a bar fills, turns red, and shows more than 100%. The badge then
+Over budget, a bar fills, turns red, and shows more than 100%. A small notch
+on the bar marks where 100% falls; the part after it is the overage. A content
+script draws it, so a bb update that changes the bars can hide the notch. The badge then
 starts with how far this month is over, e.g. `$4.20 over budget · $10.41 left`.
 
 Usage refreshes about every two minutes while it is visible, and when the
