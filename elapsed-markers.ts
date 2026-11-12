@@ -1,7 +1,6 @@
 // Draws how much of each Claude Code / Codex limit window has elapsed on its
-// Provider usage bar: a thin line along the bottom of the track, from the left
-// edge to the elapsed share of the window. Usage fill past the line's end means
-// usage is ahead of time.
+// Provider usage bar: a thin vertical tick at the elapsed share of the window.
+// Usage fill past the tick means usage is ahead of time.
 //
 // bb's usage data has no window length and bb has no slot for usage bars, so
 // this reads the DOM of the built-in provider-usage plugin: the window length
@@ -105,15 +104,28 @@ function removeLine(track: HTMLElement): void {
   }
 }
 
-function drawLine(track: HTMLElement, percent: number | null, thickness: string): void {
+/**
+ * Tick colour: the page background where the tick sits on the usage fill, so
+ * it cuts a gap in it; the foreground on the empty track.
+ */
+export function tickColor(elapsed: number, usedWidth: number): string {
+  return elapsed < usedWidth ? "var(--background)" : "var(--foreground)";
+}
+
+function drawLine(track: HTMLElement, percent: number | null): void {
   if (percent === null) {
     removeLine(track);
     return;
   }
-  const width = `${Math.round(percent * 10) / 10}%`;
+  const at = Math.round(percent * 10) / 10;
+  // Keep the 2px tick inside the rounded track at 0% and 100%.
+  const left = `clamp(0px, calc(${at}% - 1px), calc(100% - 2px))`;
+  const fill = track.firstElementChild as HTMLElement | null;
+  const used = Number.parseFloat(fill?.style.width ?? "") || 0;
+  const color = tickColor(at, used);
   let line = track.querySelector<HTMLElement>(`:scope > [${LINE}]`);
   // Runs from a MutationObserver, so only write on change.
-  if (line !== null && line.style.width === width) return;
+  if (line !== null && line.dataset["at"] === String(at) && line.dataset["color"] === color) return;
   if (line === null) {
     if (getComputedStyle(track).position === "static") {
       track.style.position = "relative";
@@ -124,16 +136,17 @@ function drawLine(track: HTMLElement, percent: number | null, thickness: string)
     line.setAttribute("aria-hidden", "true");
     Object.assign(line.style, {
       position: "absolute",
-      left: "0",
+      top: "0",
       bottom: "0",
-      height: thickness,
-      background: "var(--foreground)",
-      opacity: "0.6",
+      width: "2px",
       pointerEvents: "none",
     });
     track.append(line);
   }
-  line.style.width = width;
+  line.dataset["at"] = String(at);
+  line.dataset["color"] = color;
+  line.style.left = left;
+  line.style.background = color;
 }
 
 function percentFor(label: string | null | undefined, remainingMs: number | null): number | null {
@@ -147,12 +160,12 @@ export function decorateElapsedTime(now: number = Date.now()): void {
     // The row button's aria-label is "<full label>: <usage>. <reset>".
     const label = track.closest("button")?.getAttribute("aria-label")?.split(":")[0];
     const remaining = track.parentElement?.lastElementChild?.textContent;
-    drawLine(track, percentFor(label, remaining == null ? null : remainingMsFromCompact(remaining)), "1px");
+    drawLine(track, percentFor(label, remaining == null ? null : remainingMsFromCompact(remaining)));
   }
   for (const track of document.querySelectorAll<HTMLElement>(PANEL_TRACK)) {
     const label = track.previousElementSibling?.firstElementChild?.textContent;
     const reset = track.nextElementSibling?.textContent;
-    drawLine(track, percentFor(label, reset == null ? null : remainingMsFromResetText(reset, now)), "2px");
+    drawLine(track, percentFor(label, reset == null ? null : remainingMsFromResetText(reset, now)));
   }
 }
 

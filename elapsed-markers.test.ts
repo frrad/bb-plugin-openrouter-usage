@@ -4,6 +4,7 @@ import {
   elapsedPercent,
   remainingMsFromCompact,
   remainingMsFromResetText,
+  tickColor,
   windowMsFromLabel,
 } from "./elapsed-markers.ts";
 
@@ -71,4 +72,10 @@ test("elapsed share of the window", () => {
   // Clock skew or rounding past the window clamps.
   assert.equal(elapsedPercent(5 * HOUR, 6 * HOUR), 0);
   assert.equal(elapsedPercent(5 * HOUR, -MINUTE), 100);
+});
+
+test("the tick cuts the fill in the background colour and marks the empty track in the foreground", () => {
+  assert.equal(tickColor(30, 37), "var(--background)");
+  assert.equal(tickColor(96, 37), "var(--foreground)");
+  assert.equal(tickColor(37, 37), "var(--foreground)");
 });
