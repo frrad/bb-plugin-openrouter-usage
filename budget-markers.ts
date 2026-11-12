@@ -11,9 +11,9 @@
 const MARKED = "data-openrouter-budget-marker";
 
 /** Sidebar: track span; its next sibling shows e.g. "1016%". */
-const SIDEBAR_TRACK = "span.h-1.min-w-0.overflow-hidden.rounded-full";
+export const SIDEBAR_TRACK = "span.h-1.min-w-0.overflow-hidden.rounded-full";
 /** Settings panel: track div; the row above ends with e.g. "$32.76 / $3.23". */
-const PANEL_TRACK = "div.w-full.overflow-hidden.rounded-full.bg-muted";
+export const PANEL_TRACK = "div.w-full.overflow-hidden.rounded-full.bg-muted";
 
 /**
  * Percent used from the figure bb prints beside a bar: "$32.76 / $3.23",

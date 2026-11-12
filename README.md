@@ -13,6 +13,15 @@ account balance.
   notch; a bb update that changes the bars' classes hides it until
   `budget-markers.ts` is updated.
 - **Badge**: remaining account credit, e.g. `$10.41 left`.
+- **Elapsed time on Claude Code / Codex bars**: a thin line along the bottom
+  of each 5h and 7d (weekly) bar, in the sidebar and the Settings panel,
+  spans the share of the window that has passed. Usage fill past the line's
+  end means you are using the limit faster than time is passing. bb's usage
+  data has no window length, so the script reads it from the label
+  (`Five-hour limit`, `Weekly …`) and the time left from the reset figure
+  beside the bar; the Settings panel's day-and-time resets are parsed in
+  en-US format only. Like the budget notch, a bb update that changes the bars'
+  markup hides the lines until `elapsed-markers.ts` is updated.
 
 - **Thread cost**: a muted figure in a Pi thread's header, e.g. `$0.80`
   (hover for cost per model), cost and token details in the context card
