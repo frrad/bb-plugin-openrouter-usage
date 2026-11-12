@@ -15,6 +15,7 @@ import {
 import type { CostSummary } from "./thread-costs.ts";
 import type { threadCostContract } from "./cost-tracker.ts";
 import { clearUsageBarMarkers, decorateUsageBars } from "./budget-markers.ts";
+import { clearElapsedTime, decorateElapsedTime } from "./elapsed-markers.ts";
 
 /** Mirrors COST_CHANGED in cost-tracker.ts (a value import would bundle the server). */
 const COST_CHANGED = "thread-cost-changed";
@@ -270,16 +271,21 @@ export default definePluginApp((app) => {
         frame = requestAnimationFrame(() => {
           frame = null;
           decorateUsageBars();
+          decorateElapsedTime();
         });
       };
+      // Time passes without DOM changes; keep the elapsed lines moving.
+      const tick = window.setInterval(schedule, 60_000);
       // characterData: the figures beside a bar change in place on refresh.
       const observer = new MutationObserver(schedule);
       observer.observe(document.body, { childList: true, subtree: true, characterData: true });
       schedule();
       return () => {
         observer.disconnect();
+        window.clearInterval(tick);
         if (frame !== null) cancelAnimationFrame(frame);
         clearUsageBarMarkers();
+        clearElapsedTime();
       };
     },
   });
