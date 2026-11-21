@@ -2,7 +2,7 @@
 // and token details in bb's context card (the ring by the composer), and a
 // row in the thread's Info tab. The figures come from the server, so every client shows
 // the same total.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
   experimental_DetailRow as DetailRow,
@@ -10,7 +10,6 @@ import {
   useRealtime,
   useRpc,
   type ExperimentalThreadInfoProps,
-  type PluginThreadHeaderActionProps,
 } from "@get-bb/plugin-sdk/app";
 import type { CostSummary } from "./thread-costs.ts";
 import type { threadCostContract } from "./cost-tracker.ts";
@@ -78,30 +77,56 @@ function exactness(cost: CostSummary): string {
   return `${cost.exactGenerations} of ${cost.generations} replies billed, rest estimated`;
 }
 
-function HeaderCost({ threadId }: PluginThreadHeaderActionProps) {
-  const cost = useThreadCost(threadId);
-  useEffect(() => {
-    visibleThreads.add(threadId);
-    for (const listener of costListeners) listener();
-    return () => {
-      visibleThreads.delete(threadId);
-    };
-  }, [threadId]);
-  if (!cost) return null;
-  const models = cost.models
-    .map((model) => `${model.model}: ${formatUsd(model.costUsd, true)}`)
-    .join("\n");
-  const detail = `Thread cost ${formatUsd(cost.costUsd, true)} over ${plural(cost.generations, "reply")}, ${exactness(cost)}`;
-  return (
-    <span
-      role="img"
-      aria-label={detail}
-      title={`${detail}\n${models}`}
-      className="flex h-7 items-center px-1.5 text-xs tabular-nums text-muted-foreground"
-    >
-      {formatUsd(cost.costUsd)}
-    </span>
+/** Loads and tracks costs for every thread whose header is currently on screen. */
+function useHeaderThreadCosts(
+  threadIds: readonly string[],
+): ReadonlyMap<string, CostSummary | null> {
+  const rpc = useRpc<typeof threadCostContract>();
+  const [, setVersion] = useState(0);
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+  const idsKey = threadIds.join("\0");
+  const idsRef = useRef<readonly string[]>(threadIds);
+  idsRef.current = threadIds;
+
+  const fetchOne = useCallback(
+    (threadId: string) => {
+      rpc.call("threadCost.get", { threadId }).then(
+        (result) => {
+          rememberCost(threadId, result.cost);
+          bump();
+        },
+        () => {
+          // Keep the last figure; the next change signal retries.
+        },
+      );
+    },
+    [rpc, bump],
   );
+
+  useEffect(() => {
+    const currentIds = idsRef.current;
+    visibleThreads.clear();
+    for (const id of currentIds) visibleThreads.add(id);
+    for (const listener of costListeners) listener();
+    for (const id of currentIds) fetchOne(id);
+    return () => {
+      visibleThreads.clear();
+    };
+  }, [idsKey, fetchOne]);
+
+  useRealtime(COST_CHANGED, (payload) => {
+    const threadId = (payload as { threadId?: unknown } | null)?.threadId;
+    if (typeof threadId === "string" && visibleThreads.has(threadId)) {
+      fetchOne(threadId);
+    }
+  });
+
+  const snapshot = new Map<string, CostSummary | null>();
+  for (const id of threadIds) {
+    const cached = lastKnown.get(id);
+    if (cached !== undefined) snapshot.set(id, cached);
+  }
+  return snapshot;
 }
 
 function CostInfoRow({ threadId }: ExperimentalThreadInfoProps) {
@@ -290,10 +315,28 @@ export default definePluginApp((app) => {
     },
   });
 
-  app.slots.experimental_threadHeaderAction({
+  app.slots.experimental_threadAction({
     id: "thread-cost",
     title: "Thread cost",
-    component: HeaderCost,
+    icon: "CircleDollarSign",
+    group: "z_openrouter_cost",
+    placement: "header",
+    useData: ({ threadIds }) => useHeaderThreadCosts(threadIds),
+    item: ({ thread, data, experimental_panel }) => {
+      const cost = data.get(thread.id);
+      if (!cost) return null;
+      return {
+        label: formatUsd(cost.costUsd),
+        detail: `${formatUsd(cost.costUsd, true)} over ${plural(cost.generations, "reply")}, ${exactness(cost)}`,
+        icon: "CircleDollarSign",
+        run: () => {
+          const infoTab = experimental_panel
+            .getTabs()
+            .tabs.find((tab) => tab.detail.kind === "info");
+          if (infoTab !== undefined) experimental_panel.selectTab(infoTab.key);
+        },
+      };
+    },
   });
   app.slots.experimental_threadInfoRow({
     id: "thread-cost",
